@@ -168,7 +168,7 @@ SQLAlchemy==2.0.37
 sqlparse==0.5.3
 stack-data==0.6.3
 streamlit==1.43.0
-sympy==1.13.3
+sympy==1.13.1
 tbb==2021.13.0
 tenacity==8.5.0
 tensorboard==2.13.0
