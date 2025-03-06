@@ -1,6 +1,7 @@
 # Home.py
 import sqlite3
 import streamlit as st
+import pandas as pd
 
 
 # ----------------- 数据库初始化（用户认证部分） -----------------
@@ -26,12 +27,18 @@ def init_db():
                         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY(chat_id) REFERENCES chats(id)
                     )''')
+    cursor.execute('SELECT id FROM users WHERE username = "admin"')
+    if not cursor.fetchone():
+        cursor.execute('INSERT INTO users (username, password) VALUES (?, ?)', ('admin', 'admin'))
     conn.commit()
     conn.close()
 
 
 # ----------------- 用户认证功能 -----------------
 def register_user(username, password):
+    if username.strip().lower() == 'admin':
+        st.error("不能注册管理员账号")
+        return
     try:
         conn = sqlite3.connect('chatbot.db')
         cursor = conn.cursor()
@@ -55,7 +62,9 @@ def login_user(username, password):
 
         if user:
             if user[2] == password:  # 假设密码在第三列
-                return user[0]  # 返回用户ID
+                st.session_state.user_id = user[0]
+                st.session_state.username = user[1]  # 保存用户名
+                return user[0]
             else:
                 st.error("密码错误，请重试。")
         else:
@@ -266,7 +275,7 @@ def show_main_page():
                         st.write(f"**描述**：{page['intro']}")
 
                     # 按钮布局
-                    btn_col1, btn_col2 = st.columns([1, 0.3])
+                    btn_col1, btn_col2 = st.columns([1, 0.4])
                     with btn_col1:
                         if st.button("进入游戏", key=f"enter_{idx}"):
                             st.session_state.current_page = page["url"]
@@ -376,15 +385,57 @@ def show_subpage():
         st.rerun()
 
 
+def get_all_users():
+    conn = sqlite3.connect('chatbot.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT id, username FROM users')
+    users = cursor.fetchall()
+    conn.close()
+    return users
+
+
+def get_all_evaluations():
+    conn = sqlite3.connect('evaluation_data.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM evaluations')
+    evaluations = cursor.fetchall()
+    conn.close()
+    return evaluations
+
+
+def show_admin_interface():
+    st.title("管理员界面")
+
+    users = get_all_users()
+    evaluations = get_all_evaluations()
+
+    tab1, tab2 = st.tabs(["用户信息", "评价信息"])
+
+    with tab1:
+        st.subheader("用户列表")
+        if users:
+            df_users = pd.DataFrame(users, columns=["ID", "用户名"])
+            st.dataframe(df_users)
+        else:
+            st.write("暂无用户数据")
+
+    with tab2:
+        st.subheader("评价信息")
+        if evaluations:
+            columns = ["ID", "项目描述", "姓名", "游戏性", "故事性", "音效", "用户体验",
+                       "学习目标", "游戏反馈", "视觉效果", "交互性", "背景音乐", "学习材料",
+                       "学习成果", "动机激励", "目标明确", "玩家参与", "游戏平衡", "个人关联", "自由反馈"]
+            df_eval = pd.DataFrame(evaluations, columns=columns)
+            st.dataframe(df_eval)
+        else:
+            st.write("暂无评价数据")
 # ----------------- 主程序逻辑 -----------------
 if __name__ == "__main__":
+    # 页面配置
+    st.set_page_config(page_title="综合学习平台", layout="wide")
     # 初始化所有数据库
     init_db()
     create_db()
-
-    # 页面配置
-    st.set_page_config(page_title="综合学习平台", layout="wide")
-
     # 用户认证状态管理
     if 'user_id' not in st.session_state:
         st.session_state.user_id = None
@@ -408,19 +459,26 @@ if __name__ == "__main__":
                     st.session_state.user_id = user_id
                     st.rerun()
     else:
-        # 顶部导航栏
-        with st.container():
-            # 退出登录按钮
-            cols1 = st.columns([1, 1, 1, 1, 1, 1])
-            with cols1[5]:
-                if st.button("🚪 退出登陆"):
-                    st.session_state.clear()
-                    st.rerun()
-
-        # 显示游戏内容
-        if st.session_state.current_page:
-            show_subpage()
-        elif st.session_state.evaluation_group is not None:
-            show_evaluation_page()
+        # 管理员界面逻辑
+        if st.session_state.username == 'admin':
+            show_admin_interface()
+            if st.button("退出登录"):
+                st.session_state.clear()
+                st.rerun()
         else:
-            show_main_page()
+            # 顶部导航栏
+            with st.container():
+                # 退出登录按钮
+                cols1 = st.columns([1, 1, 1, 1, 1, 1])
+                with cols1[5]:
+                    if st.button("🚪 退出登陆"):
+                        st.session_state.clear()
+                        st.rerun()
+
+            # 显示游戏内容
+            if st.session_state.current_page:
+                show_subpage()
+            elif st.session_state.evaluation_group is not None:
+                show_evaluation_page()
+            else:
+                show_main_page()
